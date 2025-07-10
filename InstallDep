@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+
+# Fonction d'aide pour afficher des messages d'erreur et quitter
+function exit_on_error {
+    echo "ERREUR : $1" >&2
+    exit 1
+}
+
+# --- Vérification et installation de PHP 8.2 (ou plus récent via PPA) ---
+echo "--- Vérification et installation de PHP 8.2 ---"
+if ! command -v php &> /dev/null || [[ $(php -r "echo PHP_MAJOR_VERSION;") -lt 8 ]] || [[ $(php -r "echo PHP_MINOR_VERSION;") -lt 2 ]]; then
+    echo "PHP 8.2 ou plus récent non trouvé ou pas à jour. Installation/mise à jour en cours..."
+    sudo apt update &> /dev/null || exit_on_error "Mise à jour APT échouée."
+    sudo apt install -y software-properties-common &> /dev/null || exit_on_error "Installation de software-properties-common échouée."
+    sudo add-apt-repository -y ppa:ondrej/php &> /dev/null || exit_on_error "Ajout du PPA Ondrej/PHP échoué."
+    sudo apt update &> /dev/null || exit_on_error "Mise à jour APT après ajout PPA échouée."
+    sudo apt install -y php8.2 php8.2-xml php8.2-zip php8.2-intl php8.2-mbstring php8.2-curl php8.2-mysql &> /dev/null || exit_on_error "Installation de PHP 8.2 et ses extensions échouée."
+    
+    sudo update-alternatives --set php /usr/bin/php8.2 &> /dev/null || true
+    
+    echo "PHP 8.2 installé avec succès."
+else
+    echo "PHP est déjà installé et à jour (version $(php -v | head -n 1 | cut -d " " -f 2))."
+fi
+
+echo ""
+
+# --- Vérification et installation de Composer ---
+echo "--- Vérification et installation de Composer ---"
+if ! command -v composer &> /dev/null; then
+    echo "Composer non trouvé. Installation en cours..."
+    php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &> /dev/null || exit_on_error "Téléchargement de Composer installer échoué."
+    php composer-setup.php &> /dev/null || exit_on_error "Exécution de Composer installer échouée."
+    sudo mv composer.phar /usr/local/bin/composer &> /dev/null || exit_on_error "Déplacement de composer.phar échoué."
+    rm -f composer-setup.php &> /dev/null || true # Utiliser true pour ne pas exit en cas d'échec de suppression
+    echo "Composer installé avec succès."
+else
+    echo "Composer est déjà installé (version $(composer -V | cut -d " " -f 3))."
+    echo "Mise à jour de Composer..."
+    sudo composer self-update --stable &> /dev/null || echo "Avertissement : Mise à jour de Composer échouée."
+fi
+
+echo ""
+
+# --- Vérification et installation de Symfony CLI ---
+echo "--- Vérification et installation de Symfony CLI ---"
+if ! command -v symfony &> /dev/null; then
+    echo "Symfony CLI non trouvé. Installation en cours..."
+
+    if ! command -v curl &> /dev/null; then
+        echo "curl non trouvé. Installation en cours..."
+        sudo apt install -y curl &> /dev/null || exit_on_error "Installation de curl échouée."
+    fi
+
+    curl -sS https://repo.symfony.com/apt/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/symfony-cli.gpg &> /dev/null || \
+    exit_on_error "Échec de l'importation de la clé GPG de Symfony CLI."
+
+    echo "deb [signed-by=/etc/apt/keyrings/symfony-cli.gpg] https://repo.symfony.com/apt/ /" | sudo tee /etc/apt/sources.list.d/symfony-cli.list > /dev/null || \
+    exit_on_error "Échec de l'ajout du dépôt Symfony CLI."
+
+    sudo apt update &> /dev/null || exit_on_error "Mise à jour APT après ajout du dépôt Symfony CLI échouée."
+
+    sudo apt install -y symfony-cli &> /dev/null || exit_on_error "Installation de Symfony CLI échouée."
+    
+    echo "Symfony CLI installé avec succès."
+else
+    echo "Symfony CLI est déjà installé (version $(symfony -V | cut -d " " -f 3))."
+    echo "Mise à jour de Symfony CLI via APT..."
+    sudo apt update &> /dev/null && sudo apt upgrade -y symfony-cli &> /dev/null || echo "Avertissement : Mise à jour de Symfony CLI via APT échouée."
+fi
+
+echo ""
+
+# --- Vérification des prérequis Symfony ---
+echo "--- Vérification des prérequis Symfony ---"
+# Conserver la sortie de check:requirements car elle est informative
+symfony check:requirements || echo "Avertissement : Certains prérequis Symfony ne sont pas satisfaits. Vérifiez la sortie ci-dessus."
+
+echo ""
+echo "Script terminé. C'est réussi !"

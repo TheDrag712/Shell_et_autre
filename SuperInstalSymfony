@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+
+# Fonction d'aide pour afficher des messages d'erreur et quitter
+function exit_on_error {
+    echo "ERREUR : $1" >&2
+    exit 1
+}
+
+# Fonction pour installer un paquet APT
+function install_apt_package {
+    local package_name=$1
+    echo "Installation de $package_name..."
+    sudo apt install -y "$package_name" &> /dev/null || exit_on_error "Installation de $package_name échouée."
+}
+
+# Fonction pour mettre à jour les dépôts APT
+function apt_update {
+    echo "Mise à jour des dépôts APT..."
+    sudo apt update &> /dev/null || exit_on_error "Mise à jour APT échouée."
+}
+
+# --- Demander à l'utilisateur s'il veut procéder aux vérifications et installations ---
+read -p "Voulez-vous vérifier et installer les mises à jour des outils de développement (PHP, Composer, Symfony CLI) ? (oui/non) [oui] " CHECK_INSTALL_TOOLS
+CHECK_INSTALL_TOOLS=${CHECK_INSTALL_TOOLS:-oui}
+
+if [[ "$CHECK_INSTALL_TOOLS" =~ ^[oO][uU][iI]$ ]]; then
+    echo "--- Vérification et installation des outils de développement ---"
+
+    # --- Vérification et installation de PHP 8.3 (ou plus récent via PPA) ---
+    echo "--- Vérification et installation de PHP 8.3 ---"
+    CURRENT_PHP_VERSION=$(php -r "echo PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;" 2>/dev/null)
+    if ! command -v php &> /dev/null || [[ "$CURRENT_PHP_VERSION" < "8.3" ]]; then
+        echo "PHP 8.3 ou plus récent non trouvé ou pas à jour. Installation/mise à jour en cours..."
+        apt_update
+        install_apt_package "software-properties-common"
+        sudo add-apt-repository -y ppa:ondrej/php &> /dev/null || exit_on_error "Ajout du PPA Ondrej/PHP échoué."
+        apt_update
+        install_apt_package "php8.3 php8.3-xml php8.3-zip php8.3-intl php8.3-mbstring php8.3-curl php8.3-mysql"
+        
+        sudo update-alternatives --set php /usr/bin/php8.3 &> /dev/null || true
+        
+        echo "PHP 8.3 installé avec succès."
+    else
+        echo "PHP est déjà installé et à jour (version $CURRENT_PHP_VERSION)."
+    fi
+
+    echo ""
+
+    # --- Vérification et installation de Composer ---
+    echo "--- Vérification et installation de Composer ---"
+    if ! command -v composer &> /dev/null; then
+        echo "Composer non trouvé. Installation en cours..."
+        php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" &> /dev/null || exit_on_error "Téléchargement de Composer installer échoué."
+        php composer-setup.php &> /dev/null || exit_on_error "Exécution de Composer installer échouée."
+        sudo mv composer.phar /usr/local/bin/composer &> /dev/null || exit_on_error "Déplacement de composer.phar échoué."
+        rm -f composer-setup.php &> /dev/null || true
+        echo "Composer installé avec succès."
+    else
+        echo "Composer est déjà installé (version $(composer -V | cut -d " " -f 3))."
+        echo "Mise à jour de Composer..."
+        sudo composer self-update --stable &> /dev/null || echo "Avertissement : Mise à jour de Composer échouée."
+    fi
+
+    echo ""
+
+    # --- Vérification et installation de Symfony CLI ---
+    echo "--- Vérification et installation de Symfony CLI ---"
+    if ! command -v symfony &> /dev/null; then
+        echo "Symfony CLI non trouvé. Installation en cours..."
+
+        if ! command -v curl &> /dev/null; then
+            install_apt_package "curl"
+        fi
+
+        curl -sS https://repo.symfony.com/apt/pubkey.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/symfony-cli.gpg &> /dev/null || \
+        exit_on_error "Échec de l'importation de la clé GPG de Symfony CLI."
+
+        echo "deb [signed-by=/etc/apt/keyrings/symfony-cli.gpg] https://repo.symfony.com/apt/ /" | sudo tee /etc/apt/sources.list.d/symfony-cli.list > /dev/null || \
+        exit_on_error "Échec de l'ajout du dépôt Symfony CLI."
+
+        apt_update
+        install_apt_package "symfony-cli"
+        
+        echo "Symfony CLI installé avec succès."
+    else
+        echo "Symfony CLI est déjà installé (version $(symfony -V | cut -d " " -f 3))."
+        echo "Mise à jour de Symfony CLI via APT..."
+        apt_update && sudo apt upgrade -y symfony-cli &> /dev/null || echo "Avertissement : Mise à jour de Symfony CLI via APT échouée."
+    fi
+
+    echo ""
+
+    # --- Vérification des prérequis Symfony ---
+    echo "--- Vérification des prérequis Symfony ---"
+    symfony check:requirements || echo "Avertissement : Certains prérequis Symfony ne sont pas satisfaits. Vérifiez la sortie ci-dessus."
+
+    echo ""
+else
+    echo "Vérification et installation des outils de développement ignorées."
+fi
+
+# --- Initialisation d'un nouveau projet Symfony ---
+echo "--- Initialisation d'un nouveau projet Symfony ---"
+
+# Demander le nom du projet
+read -p "Quel est le nom de votre projet Symfony (ex: mon_application) ? " PROJECT_NAME
+
+# Vérifier si le nom du projet est vide
+if [ -z "$PROJECT_NAME" ]; then
+    exit_on_error "Le nom du projet ne peut pas être vide."
+fi
+
+# Vérifier si le répertoire existe déjà
+if [ -d "$PROJECT_NAME" ]; then
+    exit_on_error "Le répertoire '$PROJECT_NAME' existe déjà. Veuillez choisir un autre nom ou supprimer le répertoire existant."
+fi
+
+echo "Création du projet Symfony '$PROJECT_NAME'..."
+symfony new "$PROJECT_NAME" --webapp --no-interaction || exit_on_error "Échec de la création du projet Symfony."
+
+# Se déplacer dans le répertoire du projet
+cd "$PROJECT_NAME" || exit_on_error "Impossible de naviguer vers le répertoire du projet '$PROJECT_NAME'."
+
+echo "Installation du pack Symfony WebApp avec Composer..."
+composer require webapp || exit_on_error "Échec de l'installation du pack Symfony WebApp."
+
+echo "Installation des dépendances Composer restantes..."
+sudo composer install || exit_on_error "Échec de l'installation des dépendances Composer."
+
+echo ""
+
+# --- Configuration de la base de données (Optionnel) ---
+read -p "Voulez-vous configurer la base de données maintenant (oui/non) ? [oui] " CONFIGURE_DB
+CONFIGURE_DB=${CONFIGURE_DB:-oui}
+
+if [[ "$CONFIGURE_DB" =~ ^[oO][uU][iI]$ ]]; then
+    echo "--- Configuration de la base de données ---"
+    read -p "Type de base de données (mysql, pgsql, sqlite, etc.) ? [mysql] " DB_TYPE
+    DB_TYPE=${DB_TYPE:-mysql}
+
+    read -p "Nom d'utilisateur de la base de données ? [root] " DB_USER
+    DB_USER=${DB_USER:-root}
+
+    read -s -p "Mot de passe de la base de données (laissez vide si pas de mot de passe) ? " DB_PASSWORD
+    echo
+
+    read -p "Nom de la base de données ? [$PROJECT_NAME] " DB_NAME
+    DB_NAME=${DB_NAME:-$PROJECT_NAME}
+
+    read -p "Hôte de la base de données ? [127.0.0.1] " DB_HOST
+    DB_HOST=${DB_HOST:-127.0.0.1}
+
+    read -p "Port de la base de données ? [3306] " DB_PORT
+    DB_PORT=${DB_PORT:-3306}
+
+    DATABASE_URL="${DB_TYPE}://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+
+    echo "Mise à jour du fichier .env avec la configuration de la base de données..."
+    # Utilise sed pour remplacer la ligne DATABASE_URL, en gérant le cas commenté et non commenté
+    sed -i "/^#\?DATABASE_URL=/c\DATABASE_URL=\"${DATABASE_URL}\"" .env || \
+    exit_on_error "Impossible de mettre à jour DATABASE_URL dans .env. Vérifiez le format du fichier."
+
+    echo "Tentative de création de la base de données '$DB_NAME'..."
+    php bin/console doctrine:database:create --if-not-exists &> /dev/null || echo "Avertissement : La création de la base de données a échoué ou elle existe déjà. Vérifiez les identifiants ou le serveur de base de données."
+else
+    echo "Configuration de la base de données ignorée."
+fi
+
+echo ""
+
+echo "Lancement du serveur de développement Symfony..."
+symfony serve -d &> /dev/null || exit_on_error "Échec du démarrage du serveur Symfony."
+
+SERVER_URL=$(symfony serve:status | grep "Web server" | awk '{print $4}')
+echo "Votre projet Symfony est prêt ! Accédez-y via : $SERVER_URL"
+echo "Le serveur tourne en arrière-plan. Pour l'arrêter, utilisez 'symfony server:stop' depuis le répertoire du projet."
+
+echo ""
+echo "Script terminé. Bonne journée de développement, Tom !"

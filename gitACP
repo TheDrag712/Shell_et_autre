@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+if [ $# -eq 0 ]; then
+    echo -n "Give your comment : "; read comment
+else
+    comment="$*"
+fi
+
+# le if ou
+# [ $# -eq 0 ] && read -p "Give your comment : " comment || comment="$*"
+
+
+git add . && git commit -m "$comment" && git push
+
+

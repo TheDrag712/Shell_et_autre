@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+# dans le repertoire du projet symphony
+    #Pour créé la page d'acceuil
+
+php bin/console make:controller HomeController
