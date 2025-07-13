@@ -74,7 +74,7 @@ function renameFilesInDirectory($directory) {
 
 // --- Utilisation du script ---
 // Définissez le chemin de votre dossier ici
-$targetDirectory = __DIR__ . DIRECTORY_SEPARATOR . "mon_dossier"; // Exemple : un dossier nommé "mon_dossier" dans le même répertoire que le script
+$targetDirectory = __DIR__ . DIRECTORY_SEPARATOR . "Test_son"; // Exemple : un dossier nommé "mon_dossier" dans le même répertoire que le script
 
 // Créez le dossier si il n'existe pas pour l'exemple
 if (!is_dir($targetDirectory)) {

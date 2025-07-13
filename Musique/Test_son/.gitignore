@@ -1,0 +1,9 @@
+# Ignore environment and secret files
+*.MP3
+*.m3u
+*.wma
+*.crdownload
+*.dsf
+*.flac
+*.wav
+*.mp4
