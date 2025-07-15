@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+#il faut d'abord avoir vérifier si PHP, Composer et Symfony Cli sont bien installer et mise a jour. Si ce n'est pas le cas, proceder à l'installation
+    
+    #Utiliser la premiere commande pour vérifier si les dépendance sont installer et vérifier la version. Si ce n'est pas le cas, installer, ou mettre à jour avec la commande indenté
+    php -v
+        sudo apt install software-properties-common 
+        sudo add-apt-repository ppa:ondrej/php 
+        sudo apt update
+    composer -v
+        php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+        php composer-setup.php
+        sudo mv composer.phar /usr/local/bin/composer
+        rm -f composer-setup.php
+    symfony -v
+        echo 'deb [trusted=yes] https://repo.symfony.com/apt/ /' | sudo tee /etc/apt/sources.list.d/symfony-cli.list
+        sudo apt update
+        sudo apt install symfony-cli -y
+
+    #permet de vérifier si tout est correctement installer, renvoie FAUX si un problème existe
+        symfony check:requirements
+
+    #quand tous est bien installer, pour avoir une application en HTTPS, il faut ajouter :
+        symfony server:ca:install #si erreur taper la ligne suivnate puis retaper celle-çi
+        sudo apt install libnss3-tools
+
+#Pour créer l'application on utilisera ces commande :
+symfony new $NomPROJET --version="7.3.x-dev" --webapp #Pour initialiser le projet
+symfony server:start #pour lancer le serveur en local # L'adresse pour y acceder : http://localhost:8000/
+
+#Une fois le tout installer, on va commencer par créer un controleur
+php bin/console make:controller $NomControleur ##Faire une boucle pour créer autant de controleur que bessoin
+
